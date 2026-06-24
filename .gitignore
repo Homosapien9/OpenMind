@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+
+# Rust
+src-tauri/target/
+
+# Tauri generated (mobile bindings, platform schemas)
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/

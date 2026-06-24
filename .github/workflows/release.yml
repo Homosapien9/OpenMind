@@ -1,0 +1,183 @@
+name: Release
+
+# Trigger on version tags (v0.1.0, v1.0.0-beta.1, etc.)
+# Push a tag to start a full signed multi-platform build and GitHub Release.
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual trigger for testing the pipeline without creating a release.
+  workflow_dispatch:
+
+# Allow creating GitHub Releases and uploading assets.
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS — Intel
+          - platform: macos-latest
+            arch: x86_64
+            rust-target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+
+          # macOS — Apple Silicon (M1/M2/M3)
+          - platform: macos-latest
+            arch: aarch64
+            rust-target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+
+          # Linux — x64 (produces .deb + .AppImage)
+          - platform: ubuntu-22.04
+            arch: x86_64
+            rust-target: x86_64-unknown-linux-gnu
+            args: ''
+
+          # Windows — x64 (produces .msi + .exe NSIS installer)
+          - platform: windows-latest
+            arch: x86_64
+            rust-target: x86_64-pc-windows-msvc
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Linux system dependencies ──────────────────────────────────────
+      # Required by Tauri's WebKit/GTK backend on Ubuntu.
+      # webkit2gtk-4.1 is the correct package for Ubuntu 22.04+.
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev
+
+      # ── Node.js ──────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      # ── Rust ─────────────────────────────────────────────────────────
+      # IMPORTANT: must be stable 1.85+ — Tauri 2.x requires edition2024,
+      # stabilized in Rust 1.85 (Feb 2025). dtolnay/rust-toolchain@stable
+      # always resolves to the current stable release, which is >= 1.85
+      # as of this workflow's authoring.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      # Cache Rust build artifacts — halves CI time on cache hits.
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # ── macOS code signing ────────────────────────────────────────────
+      # Requires these GitHub repository secrets:
+      #   APPLE_CERTIFICATE          — base64-encoded .p12 file
+      #   APPLE_CERTIFICATE_PASSWORD — .p12 export password
+      #   APPLE_SIGNING_IDENTITY     — "Developer ID Application: Name (TEAMID)"
+      #   APPLE_ID                   — Apple ID email for notarization
+      #   APPLE_PASSWORD             — App-specific password for notarization
+      #   APPLE_TEAM_ID              — 10-char Apple Team ID
+      #
+      # If these secrets are absent (e.g. for personal/open source builds),
+      # the step is skipped and the build produces an unsigned .dmg.
+      # UNSIGNED BUILDS will trigger a macOS "damaged app" warning —
+      # see the README's "unsigned builds" section for the workaround.
+      - name: Import Apple certificate
+        if: matrix.platform == 'macos-latest' && env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import /tmp/certificate.p12 \
+            -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "" build.keychain
+          rm /tmp/certificate.p12
+
+      # ── Frontend dependencies ─────────────────────────────────────────
+      - name: Install frontend dependencies
+        run: npm install
+
+      # ── Tauri build + release ─────────────────────────────────────────
+      # tauri-apps/tauri-action@v0 runs `cargo tauri build`, bundles the
+      # app, creates/updates a GitHub Release, and uploads the artifacts.
+      #
+      # Signing environment variables are passed through from secrets.
+      # When secrets are absent (unsigned build), Tauri builds without
+      # signing — the build still succeeds but installers will trigger
+      # OS warnings.
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing + notarization (optional — see note above)
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows signing via Azure Key Vault (optional)
+          # See: https://v2.tauri.app/distribute/sign/windows/
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_KEY_VAULT_URI: ${{ secrets.AZURE_KEY_VAULT_URI }}
+          AZURE_CERT_NAME: ${{ secrets.AZURE_CERT_NAME }}
+          # Tauri updater signing key (generate with: cargo tauri signer generate)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'OpenMind Desktop ${{ github.ref_name }}'
+          releaseBody: |
+            ## OpenMind Desktop ${{ github.ref_name }}
+
+            Fully local-first AI OS. Every claim, literally true.
+
+            ### Downloads
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | macOS (Apple Silicon) | `OpenMind Desktop_*_aarch64.dmg` | Requires macOS 11+ |
+            | macOS (Intel) | `OpenMind Desktop_*_x64.dmg` | Requires macOS 11+ |
+            | Windows | `OpenMind Desktop_*_x64-setup.exe` | Windows 10+ |
+            | Linux | `openmind-desktop_*_amd64.AppImage` | Any distro |
+            | Linux | `openmind-desktop_*_amd64.deb` | Debian/Ubuntu |
+
+            ### First run requirements
+            - **Ollama**: Install from [ollama.com](https://ollama.com) and pull a model (`ollama pull llama3.2`)
+            - **MCP filesystem connector**: Node.js required (`npm` or `npx` must be in PATH)
+
+            ### Unsigned builds
+            If you see "damaged app" on macOS, run:
+            ```
+            xattr -d com.apple.quarantine /Applications/OpenMind\ Desktop.app
+            ```
+            If you see a Windows SmartScreen warning, click "More info" → "Run anyway".
+            These warnings appear on builds without a paid code signing certificate.
+            See the README for details.
+          releaseDraft: true
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+          args: ${{ matrix.args }}

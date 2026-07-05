@@ -1,7 +1,7 @@
 {
   "name": "openmind-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenMind Desktop — fully local-first AI OS. Rust + Tauri core, React frontend.",
   "type": "module",
   "scripts": {

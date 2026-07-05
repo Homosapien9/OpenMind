@@ -36,13 +36,15 @@ pub fn run() {
             // keyring-core requires set_default_store() to be called once at startup.
             #[cfg(target_os = "macos")]
             {
-                use apple_native_keyring_store::AppleKeyringStore;
-                keyring_core::set_default_store(std::sync::Arc::new(AppleKeyringStore::default()));
+                let store = apple_native_keyring_store::Store::new()
+                    .expect("Failed to initialize macOS Keychain store");
+                keyring_core::set_default_store(std::sync::Arc::new(store));
             }
             #[cfg(target_os = "windows")]
             {
-                use windows_native_keyring_store::WindowsKeyringStore;
-                keyring_core::set_default_store(std::sync::Arc::new(WindowsKeyringStore::default()));
+                let store = windows_native_keyring_store::Store::new()
+                    .expect("Failed to initialize Windows Credential Store");
+                keyring_core::set_default_store(std::sync::Arc::new(store));
             }
             // Linux: keyring-core's built-in file-based store is the default
             // when no explicit store is set. It encrypts tokens at rest

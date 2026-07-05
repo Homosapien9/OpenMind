@@ -1,41 +1,37 @@
-/**
- * IPC bindings — the typed contract between the React frontend and the
- * Rust core, invoked over Tauri's `invoke()` bridge.
- *
- * STATUS: scaffold only. Every function below calls a `#[tauri::command]`
- * that exists in src-tauri/src/commands.rs but currently returns
- * `Err("not implemented")`. The types are real and match the spec's
- * architecture (§7) — the implementations are not.
- *
- * As each Rust module (lazy_agent, model_router, memory, mcp) gets a real
- * implementation, the corresponding command here starts returning real
- * data with no change needed on the frontend side — that's the point of
- * defining the contract first.
- */
-
 import { invoke } from "@tauri-apps/api/core";
 
-// ── Local Model Router (spec §3) ────────────────────────────────────────
-
-export type ModelBackend = "embedded" | "ollama" | "lm_studio";
+export type ModelBackend =
+  | "ollama"
+  | "open_ai"
+  | "open_router"
+  | "anthropic"
+  | "nvidia"
+  | "compatible";
 
 export interface ModelStatus {
   backend: ModelBackend;
   modelName: string;
   available: boolean;
+  detail?: string | null;
 }
 
-export async function getModelStatus(): Promise<ModelStatus> {
-  return invoke("get_model_status");
+export interface ProviderSettings {
+  backend: ModelBackend;
+  modelName: string;
+  apiKey?: string | null;
+  baseUrl?: string | null;
+  ollamaUrl?: string | null;
+  temperature?: number | null;
 }
 
-// ── LazyAgent (spec §4) ──────────────────────────────────────────────────
-
-export type LazySource = "rule" | "exact_cache" | "semantic_cache" | "llm";
+export interface AppSettings {
+  provider: ProviderSettings;
+  onboardingCompleted: boolean;
+}
 
 export interface LazyResponse {
   text: string;
-  source: LazySource;
+  source: "rule" | "exact_cache" | "semantic_cache" | "llm";
   tokensUsed: number;
   tokensSaved: number;
   latencyMs: number;
@@ -43,12 +39,7 @@ export interface LazyResponse {
 
 export interface ChatRequest {
   message: string;
-  /** Optional conversation/thread id for context grouping. */
   threadId?: string;
-}
-
-export async function sendChatMessage(req: ChatRequest): Promise<LazyResponse> {
-  return invoke("send_chat_message", { req });
 }
 
 export interface TokenSavingsStats {
@@ -59,21 +50,14 @@ export interface TokenSavingsStats {
   savingsPct: number;
 }
 
-export async function getTokenSavings(): Promise<TokenSavingsStats> {
-  return invoke("get_token_savings");
-}
-
-// ── Memory Tree (spec §5) ────────────────────────────────────────────────
-
 export interface MemoryNode {
   id: string;
   title: string;
-  /** Markdown content, Obsidian-vault-compatible. */
   content: string;
   source: string;
   createdAt: string;
   updatedAt: string;
-  children: string[]; // child node ids
+  children: string[];
 }
 
 export interface AddMemoryRequest {
@@ -83,18 +67,6 @@ export interface AddMemoryRequest {
   tags?: string[];
 }
 
-export async function addMemory(req: AddMemoryRequest): Promise<MemoryNode> {
-  return invoke("add_memory", { req });
-}
-
-export async function listMemoryTree(): Promise<MemoryNode[]> {
-  return invoke("list_memory_tree");
-}
-
-export async function searchMemory(query: string): Promise<MemoryNode[]> {
-  return invoke("search_memory", { query });
-}
-
 export interface BackgroundLoopStatus {
   running: boolean;
   lastRunAt: string | null;
@@ -102,34 +74,30 @@ export interface BackgroundLoopStatus {
   nextRunAt: string | null;
 }
 
-export async function getBackgroundLoopStatus(): Promise<BackgroundLoopStatus> {
-  return invoke("get_background_loop_status");
+export interface ConversationEntry {
+  threadId: string;
+  role: string;
+  content: string;
+  timestamp: string;
+  metadata: string;
 }
 
-// ── MCP Integration Framework (spec §6) ──────────────────────────────────
+export interface ThreadSummary {
+  threadId: string;
+  lastUpdatedAt: string;
+  preview: string;
+  messageCount: number;
+}
 
 export type ConnectorAuthState = "disconnected" | "connecting" | "connected" | "error";
 
 export interface ConnectorManifest {
   id: string;
   name: string;
-  /** e.g. "stdio" | "streamable_http" — MCP transport this connector uses */
   transport: "stdio" | "streamable_http";
   authState: ConnectorAuthState;
   fetchIntervalMinutes: number;
   lastFetchAt: string | null;
-}
-
-export async function listConnectors(): Promise<ConnectorManifest[]> {
-  return invoke("list_connectors");
-}
-
-export async function connectIntegration(connectorId: string): Promise<ConnectorManifest> {
-  return invoke("connect_integration", { connectorId });
-}
-
-export async function disconnectIntegration(connectorId: string): Promise<void> {
-  return invoke("disconnect_integration", { connectorId });
 }
 
 export interface McpTool {
@@ -147,20 +115,6 @@ export interface CallToolResult {
   isError: boolean;
 }
 
-export async function listTools(connectorId: string): Promise<McpTool[]> {
-  return invoke("list_tools", { connectorId });
-}
-
-export async function callTool(
-  connectorId: string,
-  toolName: string,
-  args?: Record<string, unknown>,
-): Promise<CallToolResult> {
-  return invoke("call_tool", { connectorId, toolName, arguments: args });
-}
-
-// ── OAuth (spec §6, Milestone 6) ────────────────────────────────────────
-
 export interface OAuthConfig {
   clientId: string;
   clientSecret: string;
@@ -175,16 +129,81 @@ export interface OAuthToken {
   tokenType: string;
 }
 
-/** Gmail read-only scope — the first connector for Milestone 6. */
-export const GMAIL_READONLY_SCOPE =
-  "https://www.googleapis.com/auth/gmail.readonly";
+export async function getModelStatus(): Promise<ModelStatus> {
+  return invoke("get_model_status");
+}
 
-/**
- * Begin the Google OAuth loopback flow.
- * Opens the system browser. Resolves when the user completes consent
- * (or rejects on denial/error). Shows a loading state in the UI while
- * waiting — this can take 10-60 seconds depending on the user.
- */
+export async function getAppSettings(): Promise<AppSettings> {
+  return invoke("get_app_settings");
+}
+
+export async function updateAppSettings(newSettings: AppSettings): Promise<AppSettings> {
+  return invoke("update_app_settings", { newSettings });
+}
+
+export async function sendChatMessage(req: ChatRequest): Promise<LazyResponse> {
+  return invoke("send_chat_message", { req });
+}
+
+export async function sendChatMessageStreaming(
+  req: ChatRequest,
+  streamId: string,
+): Promise<LazyResponse> {
+  return invoke("send_chat_message_streaming", { req, streamId });
+}
+
+export async function getTokenSavings(): Promise<TokenSavingsStats> {
+  return invoke("get_token_savings");
+}
+
+export async function addMemory(req: AddMemoryRequest): Promise<MemoryNode> {
+  return invoke("add_memory", { req });
+}
+
+export async function listMemoryTree(): Promise<MemoryNode[]> {
+  return invoke("list_memory_tree");
+}
+
+export async function searchMemory(query: string): Promise<MemoryNode[]> {
+  return invoke("search_memory", { query });
+}
+
+export async function getBackgroundLoopStatus(): Promise<BackgroundLoopStatus> {
+  return invoke("get_background_loop_status");
+}
+
+export async function getConversationHistory(threadId: string): Promise<ConversationEntry[]> {
+  return invoke("get_conversation_history", { threadId });
+}
+
+export async function listConversationThreads(): Promise<ThreadSummary[]> {
+  return invoke("list_conversation_threads");
+}
+
+export async function listConnectors(): Promise<ConnectorManifest[]> {
+  return invoke("list_connectors");
+}
+
+export async function connectIntegration(connectorId: string): Promise<ConnectorManifest> {
+  return invoke("connect_integration", { connectorId });
+}
+
+export async function disconnectIntegration(connectorId: string): Promise<void> {
+  return invoke("disconnect_integration", { connectorId });
+}
+
+export async function listTools(connectorId: string): Promise<McpTool[]> {
+  return invoke("list_tools", { connectorId });
+}
+
+export async function callTool(
+  connectorId: string,
+  toolName: string,
+  args?: Record<string, unknown>,
+): Promise<CallToolResult> {
+  return invoke("call_tool", { connectorId, toolName, arguments: args });
+}
+
 export async function beginOAuth(
   connectorId: string,
   config: OAuthConfig,
@@ -192,20 +211,10 @@ export async function beginOAuth(
   return invoke("begin_oauth", { connectorId, config });
 }
 
-/**
- * Check if a stored token exists for a connector.
- * Returns null if no token is stored (not yet connected).
- */
-export async function getOAuthToken(
-  connectorId: string,
-): Promise<OAuthToken | null> {
+export async function getOAuthToken(connectorId: string): Promise<OAuthToken | null> {
   return invoke("get_oauth_token", { connectorId });
 }
 
-/**
- * Remove a stored token from the OS keychain.
- * Used when the user disconnects a connector.
- */
 export async function revokeOAuthToken(connectorId: string): Promise<void> {
   return invoke("revoke_oauth_token", { connectorId });
 }

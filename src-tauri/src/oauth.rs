@@ -354,13 +354,12 @@ async fn exchange_code(
     code: &str,
     redirect_uri: &str,
 ) -> AppResult<OAuthToken> {
-    let params = [
-        ("client_id", client_id),
-        ("client_secret", client_secret),
-        ("code", code),
-        ("grant_type", "authorization_code"),
-        ("redirect_uri", redirect_uri),
-    ];
+    let mut params = HashMap::new();
+    params.insert("client_id", client_id);
+    params.insert("client_secret", client_secret);
+    params.insert("code", code);
+    params.insert("grant_type", "authorization_code");
+    params.insert("redirect_uri", redirect_uri);
 
     let response = client
         .post(GOOGLE_TOKEN_URL)

@@ -1,22 +1,13 @@
 [package]
 name = "openmind-desktop"
-version = "0.1.0"
-description = "OpenMind Desktop — fully local-first AI OS. Rust core, Tauri shell."
+version = "0.2.0"
+description = "OpenMind Desktop — local-first desktop assistant with pluggable model backends."
 authors = ["OpenMind Contributors"]
 license = "MIT"
 edition = "2021"
-# 1.85, not lower — Tauri 2.x's own dependency tree (specifically
-# tauri-plugin-fs -> toml -> serde_spanned) requires edition2024, which
-# only exists from Rust 1.85 onward (stabilized Feb 2025). Confirmed by
-# direct compile testing: Ubuntu 24.04's apt-provided 1.75.0 fails with
-# an explicit "edition2024 is required" error on this dependency tree.
 rust-version = "1.85"
 
-# See https://v2.tauri.app/develop/configuration-files/ for what this enables —
-# Tauri reads this Cargo.toml at build time as well as tauri.conf.json.
 [lib]
-# The reason we don't write directly in main.rs: this compiles the app as a
-# library so mobile builds can load it through platform frameworks too.
 name = "openmind_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -28,49 +19,18 @@ tauri = { version = "2.11", features = [] }
 tauri-plugin-shell = "2.3"
 tauri-plugin-fs = "2.5"
 tauri-plugin-store = "2.4"
-# HTTP client for the Local Model Router's Ollama backend (spec §3,
-# Milestone 1). reqwest's async API matches ModelRouter's async methods
-# directly — no separate runtime bridging needed since tokio is already
-# a dependency.
-reqwest = { version = "0.13", features = ["json"] }
+reqwest = { version = "0.13", features = ["json", "form", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Async runtime — the background loop (spec §5), MCP client (spec §6), and
-# local model router (spec §3) all need real async I/O once implemented.
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util"] }
-# SQLite for the Memory Tree storage layer (spec §5).
 rusqlite = { version = "0.40", features = ["bundled", "vtab"] }
-# SHA-256 for LazyAgent's exact-cache key, matching the Python reference
-# implementation's hashlib.sha256(normalized_query + intent) exactly.
-# Compile-verified using 0.10 as a stand-in (0.11's own cpufeatures dep
-# also requires edition2024) — same Digest trait API, no surface change.
-sha2 = "0.11"
-# Structured error handling for command results returned over IPC.
+sha2 = "0.10"
 thiserror = "2"
 anyhow = "1"
-# OAuth loopback flow (Milestone 6) — local HTTP listener for the
-# Google authorization code redirect, no backend proxy.
-# Binds 127.0.0.1 on a random available port, opens the system browser,
-# catches the code on redirect.
-#
-# OS keychain for encrypted token storage (Milestone 6).
-# Using the new split ecosystem: keyring-core + platform-specific stores.
-# The old monolithic `keyring` crate is now sample-code-only; don't use it.
-# NOTE: must live under [dependencies], not under [profile.release] — a
-# key placed after a table header with no new header belongs to that
-# table, which is what silently dropped this dependency before.
 keyring-core = "0.7"
-
-# Platform keychain stores — conditional compilation per OS.
-# apple-native-keyring-store: 0.4.x does not exist on crates.io; the crate
-# jumped 0.2.x -> 1.0.0 when it added keyring-core 0.7 compatibility.
-[target.'cfg(target_os = "macos")'.dependencies]
-apple-native-keyring-store = { version = "1.0", features = ["keychain"] }
-
-# windows-native-keyring-store: bumped to the 1.x line (current: 1.1.0) to
-# match the same keyring-core 0.7 generation as the Apple store above.
-[target.'cfg(target_os = "windows")'.dependencies]
-windows-native-keyring-store = "1.1"
+futures-util = "0.3"
+base64 = "0.22"
+rand = "0.8"
 
 [profile.release]
 panic = "abort"
@@ -78,3 +38,9 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0", features = ["keychain"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "1.1"

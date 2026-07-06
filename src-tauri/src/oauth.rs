@@ -29,8 +29,6 @@ pub struct OAuthConfig {
     pub scopes: Vec<String>,
 }
 
-pub const GMAIL_READONLY_SCOPE: &str = "https://www.googleapis.com/auth/gmail.readonly";
-
 const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const KEYCHAIN_SERVICE: &str = "com.openmind.desktop";

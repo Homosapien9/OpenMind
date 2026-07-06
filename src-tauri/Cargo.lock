@@ -53,7 +53,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7be2f067ccd8d4b4d4a66ddafe0f32a5dff31732f32dbff85fefc40929b1f72"
 dependencies = [
- "keyring-core 1.0.0",
+ "keyring-core",
  "log",
  "security-framework",
 ]
@@ -1831,15 +1831,6 @@ dependencies = [
 
 [[package]]
 name = "keyring-core"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d8286c3ab222af2fa9e57874fe419893d967f739c7bf1743f98a88678edbf08"
-dependencies = [
- "log",
-]
-
-[[package]]
-name = "keyring-core"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb1e621458ca9c51aa110bd0339d4751a056b9576bf1253aee1aa560dda0fc9d"
@@ -2305,7 +2296,7 @@ dependencies = [
  "apple-native-keyring-store",
  "base64 0.22.1",
  "futures-util",
- "keyring-core 0.7.4",
+ "keyring-core",
  "rand 0.8.6",
  "reqwest",
  "rusqlite",
@@ -4844,7 +4835,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "063426e76fdec7438d56bb777f67e318a84a25c707b07e575cb8b78e10c028f8"
 dependencies = [
  "byteorder",
- "keyring-core 1.0.0",
+ "keyring-core",
  "regex",
  "windows-sys 0.61.2",
  "zeroize",

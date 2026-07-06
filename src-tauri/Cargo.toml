@@ -27,7 +27,7 @@ rusqlite = { version = "0.40", features = ["bundled", "vtab"] }
 sha2 = "0.10"
 thiserror = "2"
 anyhow = "1"
-keyring-core = "0.7"
+keyring-core = "1.0"
 futures-util = "0.3"
 base64 = "0.22"
 rand = "0.8"

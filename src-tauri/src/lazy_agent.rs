@@ -241,6 +241,7 @@ impl LazyAgent {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn ask(
         &self,
         query: &str,

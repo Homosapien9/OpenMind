@@ -86,6 +86,7 @@ pub async fn send_chat_message(
         .await
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn send_chat_message_streaming(
     req: ChatRequest,

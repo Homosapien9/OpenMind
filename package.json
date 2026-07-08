@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "rm -f dist/wrangler.json dist/.assetsignore && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "deploy": "npm run build && wrangler deploy",

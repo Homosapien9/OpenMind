@@ -271,6 +271,7 @@ impl MemoryTree {
 
     pub fn search(&self, query: &str) -> AppResult<Vec<MemoryNode>> {
         let conn = db_lock!(self);
+        // Try FTS5 full-text search first, fall back to LIKE if it fails
         let fts_result = conn
             .prepare(
                 "SELECT m.id, m.content, m.category, m.source, m.created_at, m.updated_at

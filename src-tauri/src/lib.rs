@@ -23,9 +23,13 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
+                // `apple_native_keyring_store::keychain::Store::new()` already returns an
+                // `Arc<Store>`, so wrapping it again in `Arc::new(...)` produces an
+                // `Arc<Arc<Store>>`, which does not satisfy `CredentialStoreApi`.
+                // Pass it straight through so it coerces to `Arc<dyn CredentialStoreApi>`.
                 let store = apple_native_keyring_store::keychain::Store::new()
                     .expect("failed to initialize macOS Keychain store");
-                keyring_core::set_default_store(std::sync::Arc::new(store));
+                keyring_core::set_default_store(store);
             }
             #[cfg(target_os = "windows")]
             {
